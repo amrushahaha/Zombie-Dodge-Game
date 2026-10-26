@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zombie Dodge</title>
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        margin: 0;
+        background: #111;
+        color: white;
+        font-family: Arial, sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        overflow: hidden;
+    }
+
+    #gameContainer {
+        position: relative;
+        width: 400px;
+        max-width: 95vw;
+    }
+
+    canvas {
+        display: block;
+        width: 100%;
+        background: #1b1b1b;
+        border: 2px solid #555;
+        border-radius: 8px;
+        box-shadow: 0 0 25px rgba(0,0,0,0.8);
+    }
+
+    #ui {
+        position: absolute;
+        top: 10px;
+        left: 15px;
+        right: 15px;
+        display: flex;
+        justify-content: space-between;
+        font-size: 18px;
+        font-weight: bold;
+        pointer-events: none;
+        text-shadow: 2px 2px 4px black;
+    }
+
+    #overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        background: rgba(0,0,0,0.82);
+        border-radius: 8px;
+    }
+
+    #overlay h1 {
+        color: #58d64b;
+        font-size: 38px;
+        margin: 0 0 10px;
+    }
+
+    #overlay p {
+        margin: 5px 20px;
+        color: #ddd;
+    }
+
+    button {
+        margin-top: 20px;
+        padding: 12px 28px;
+        border: none;
+        border-radius: 6px;
+        background: #00bcd4;
+        color: white;
+        font-size: 18px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    button:hover {
+        background: #0097a7;
+    }
+
+    #controls {
+        text-align: center;
+        margin-top: 10px;
+        color: #aaa;
+        font-size: 14px;
+    }
+</style>
+</head>
+
+<body>
+
+<div id="gameContainer">
+
+    <canvas id="gameCanvas" width="400" height="600"></canvas>
+
+    <div id="ui">
+        <span>Score: <span id="score">0</span></span>
+        <span>❤️ <span id="lives">3</span></span>
+    </div>
+
+    <div id="overlay">
+        <h1 id="title">🧟 ZOMBIE DODGE</h1>
+        <p id="message">
+            Dodge the bombs and survive as long as possible!
+        </p>
+        <p>⬅️ ➡️ Use the arrow keys to move</p>
+        <button id="startButton">START GAME</button>
+    </div>
+
+    <div id="controls">
+        Use ← → to move
+    </div>
+
+</div>
+
+<script>
+
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+const scoreText = document.getElementById("score");
+const livesText = document.getElementById("lives");
+
+const overlay = document.getElementById("overlay");
+const title = document.getElementById("title");
+const message = document.getElementById("message");
+const startButton = document.getElementById("startButton");
+
+
+// ===============================
+// GAME VARIABLES
+// ===============================
+
+let gameRunning = false;
+let score = 0;
+let lives = 3;
+
+let frameCount = 0;
+let gameSpeed = 2;
+
+let obstacles = [];
+let particles = [];
+
+let keys = {};
+
+
+// ===============================
+// PLAYER
+// ===============================
+
+const player = {
+    x: 175,
+    y: 520,
+    size: 50,
+    speed: 6
+};
+
+
+// ===============================
+// KEYBOARD CONTROLS
+// ===============================
+
+document.addEventListener("keydown", function(event) {
+
+    keys[event.key] = true;
+
+    if (
+        event.key === "ArrowLeft" ||
+        event.key === "ArrowRight"
+    ) {
+        event.preventDefault();
+    }
+
+});
+
+document.addEventListener("keyup", function(event) {
+    keys[event.key] = false;
+});
+
+
+// ===============================
+// START GAME
+// ===============================
+
+startButton.addEventListener("click", startGame);
+
+function startGame() {
+
+    gameRunning = true;
+
+    score = 0;
+    lives = 3;
+
+    frameCount = 0;
+    gameSpeed = 2;
+
+    obstacles = [];
+    particles = [];
+
+    player.x = canvas.width / 2 - player.size / 2;
+
+    scoreText.textContent = score;
+    livesText.textContent = lives;
+
+    overlay.style.display = "none";
+
+    requestAnimationFrame(gameLoop);
+}
+
+
+// ===============================
+// SPAWN BOMBS
+// ===============================
+
+function spawnBomb() {
+
+    const size = Math.random() * 15 + 30;
+
+    const x = Math.random() * (canvas.width - size);
+
+    obstacles.push({
+        x: x,
+        y: -size,
+        size: size,
+        speed: gameSpeed + Math.random() * 2,
+        rotation: 0,
+        rotationSpeed: (Math.random() - 0.5) * 0.1
+    });
+}
+
+
+// ===============================
+// DRAW ZOMBIE
+// ===============================
+
+function drawZombie() {
+
+    const x = player.x;
+    const y = player.y;
+    const s = player.size;
+
+    // Body
+    ctx.fillStyle = "#4caf50";
+
+    ctx.fillRect(
+        x + 8,
+        y + 20,
+        s - 16,
+        s - 20
+    );
+
+    // Head
+    ctx.fillStyle = "#72c94a";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x + s / 2,
+        y + 18,
+        18,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // Hair
+    ctx.fillStyle = "#263238";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x + s / 2,
+        y + 9,
+        17,
+        Math.PI,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // Eyes
+    ctx.fillStyle = "white";
+
+    ctx.fillRect(
+        x + 11,
+        y + 14,
+        8,
+        8
+    );
+
+    ctx.fillRect(
+        x + s - 19,
+        y + 14,
+        8,
+        8
+    );
+
+
+    // Pupils
+    ctx.fillStyle = "black";
+
+    ctx.fillRect(
+        x + 14,
+        y + 17,
+        4,
+        5
+    );
+
+    ctx.fillRect(
+        x + s - 17,
+        y + 17,
+        4,
+        5
+    );
+
+
+    // Mouth
+    ctx.fillStyle = "#222";
+
+    ctx.fillRect(
+        x + 12,
+        y + 30,
+        s - 24,
+        8
+    );
+
+
+    // Teeth
+    ctx.fillStyle = "white";
+
+    ctx.fillRect(
+        x + 16,
+        y + 30,
+        5,
+        5
+    );
+
+    ctx.fillRect(
+        x + s - 21,
+        y + 30,
+        5,
+        5
+    );
+
+
+    // Shirt
+    ctx.fillStyle = "#263238";
+
+    ctx.fillRect(
+        x + 12,
+        y + 40,
+        s - 24,
+        10
+    );
+}
+
+
+// ===============================
+// DRAW BOMB
+// ===============================
+
+function drawBomb(bomb) {
+
+    const centerX = bomb.x + bomb.size / 2;
+    const centerY = bomb.y + bomb.size / 2;
+
+    const radius = bomb.size / 2 - 3;
+
+
+    ctx.save();
+
+    ctx.translate(centerX, centerY);
+
+    ctx.rotate(bomb.rotation);
+
+
+    // Bomb body
+    ctx.fillStyle = "#222";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        0,
+        0,
+        radius,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // Highlight
+    ctx.fillStyle = "#555";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        -radius * 0.3,
+        -radius * 0.3,
+        radius * 0.2,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // Fuse
+    ctx.strokeStyle = "#8b4513";
+    ctx.lineWidth = 3;
+
+    ctx.beginPath();
+
+    ctx.moveTo(0, -radius);
+
+    ctx.lineTo(7, -radius - 10);
+
+    ctx.stroke();
+
+
+    // Spark
+    ctx.fillStyle = "#ffcc00";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        8,
+        -radius - 12,
+        4,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    ctx.restore();
+}
+
+
+// ===============================
+// COLLISION
+// ===============================
+
+function checkCollision(player, bomb) {
+
+    return (
+        player.x < bomb.x + bomb.size &&
+        player.x + player.size > bomb.x &&
+        player.y < bomb.y + bomb.size &&
+        player.y + player.size > bomb.y
+    );
+}
+
+
+// ===============================
+// EXPLOSION
+// ===============================
+
+function createExplosion(x, y) {
+
+    for (let i = 0; i < 25; i++) {
+
+        particles.push({
+
+            x: x,
+            y: y,
+
+            size: Math.random() * 6 + 2,
+
+            speedX:
+                (Math.random() - 0.5) * 8,
+
+            speedY:
+                (Math.random() - 0.5) * 8,
+
+            life: 40
+
+        });
+    }
+}
+
+
+// ===============================
+// DRAW PARTICLES
+// ===============================
+
+function updateParticles() {
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+
+        const p = particles[i];
+
+        p.x += p.speedX;
+        p.y += p.speedY;
+
+        p.life--;
+
+        ctx.fillStyle =
+            p.life % 2 === 0
+                ? "#ff9800"
+                : "#ffeb3b";
+
+        ctx.fillRect(
+            p.x,
+            p.y,
+            p.size,
+            p.size
+        );
+
+
+        if (p.life <= 0) {
+            particles.splice(i, 1);
+        }
+    }
+}
+
+
+// ===============================
+// GAME OVER
+// ===============================
+
+function gameOver() {
+
+    gameRunning = false;
+
+    title.textContent = "💀 GAME OVER";
+
+    message.innerHTML =
+        "Final Score: <strong>" +
+        score +
+        "</strong><br><br>" +
+        "The zombie did not survive.";
+
+    startButton.textContent = "PLAY AGAIN";
+
+    overlay.style.display = "flex";
+}
+
+
+// ===============================
+// MAIN GAME LOOP
+// ===============================
+
+function gameLoop() {
+
+    if (!gameRunning) {
+        return;
+    }
+
+
+    // Clear screen
+    ctx.clearRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+
+    // Background
+    drawBackground();
+
+
+    // ===========================
+    // MOVE PLAYER
+    // ===========================
+
+    if (
+        keys["ArrowLeft"] &&
+        player.x > 0
+    ) {
+        player.x -= player.speed;
+    }
+
+    if (
+        keys["ArrowRight"] &&
+        player.x < canvas.width - player.size
+    ) {
+        player.x += player.speed;
+    }
+
+
+    // ===========================
+    // SPAWN BOMBS
+    // ===========================
+
+    frameCount++;
+
+    let spawnRate =
+        Math.max(25, 80 - Math.floor(score / 5) * 5);
+
+
+    if (frameCount % spawnRate === 0) {
+
+        spawnBomb();
+
+    }
+
+
+    // ===========================
+    // MOVE BOMBS
+    // ===========================
+
+    for (
+        let i = obstacles.length - 1;
+        i >= 0;
+        i--
+    ) {
+
+        const bomb = obstacles[i];
+
+        bomb.y += bomb.speed;
+
+        bomb.rotation += bomb.rotationSpeed;
+
+
+        // Collision
+        if (checkCollision(player, bomb)) {
+
+            createExplosion(
+                bomb.x + bomb.size / 2,
+                bomb.y + bomb.size / 2
+            );
+
+            obstacles.splice(i, 1);
+
+            lives--;
+
+            livesText.textContent = lives;
+
+
+            if (lives <= 0) {
+
+                gameOver();
+
+                return;
+            }
+
+            continue;
+        }
+
+
+        // Bomb missed player
+        if (bomb.y > canvas.height) {
+
+            obstacles.splice(i, 1);
+
+            score++;
+
+            scoreText.textContent = score;
+
+        }
+    }
+
+
+    // ===========================
+    // INCREASE DIFFICULTY
+    // ===========================
+
+    if (frameCount % 600 === 0) {
+
+        gameSpeed += 0.3;
+
+    }
+
+
+    // ===========================
+    // DRAW PLAYER
+    // ===========================
+
+    drawZombie();
+
+
+    // ===========================
+    // DRAW BOMBS
+    // ===========================
+
+    for (const bomb of obstacles) {
+
+        drawBomb(bomb);
+
+    }
+
+
+    // ===========================
+    // PARTICLES
+    // ===========================
+
+    updateParticles();
+
+
+    // Next frame
+    requestAnimationFrame(gameLoop);
+}
+
+
+
+function drawBackground() {
+
+    // Dark background
+    ctx.fillStyle = "grey";
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+
+    // Ground
+    ctx.fillStyle = "#202020";
+
+    ctx.fillRect(
+        0,
+        canvas.height - 35,
+        canvas.width,
+        35
+    );
+
+
+    // Random-looking road lines
+    ctx.strokeStyle = "#292929";
+    ctx.lineWidth = 2;
+
+    for (
+        let y = 40;
+        y < canvas.height;
+        y += 60
+    ) {
+
+        ctx.beginPath();
+
+        ctx.moveTo(0, y);
+
+        ctx.lineTo(canvas.width, y);
+
+        ctx.stroke();
+
+    }
+
+
+    // Side walls
+    ctx.strokeStyle = "#333";
+
+    ctx.beginPath();
+
+    ctx.moveTo(5, 0);
+    ctx.lineTo(5, canvas.height);
+
+    ctx.moveTo(canvas.width - 5, 0);
+    ctx.lineTo(canvas.width - 5, canvas.height);
+
+    ctx.stroke();
+}
+
+
+// ===============================
+// TOUCH CONTROLS
+// ===============================
+
+let touchStartX = null;
+
+canvas.addEventListener("touchstart", function(event) {
+
+    touchStartX =
+        event.touches[0].clientX;
+
+});
+
+
+canvas.addEventListener("touchmove", function(event) {
+
+    if (touchStartX === null) {
+        return;
+    }
+
+    const currentX =
+        event.touches[0].clientX;
+
+    const difference =
+        currentX - touchStartX;
+
+
+    if (difference > 10) {
+
+        player.x += player.speed;
+
+    }
+
+    if (difference < -10) {
+
+        player.x -= player.speed;
+
+    }
+
+
+    // Keep player inside canvas
+    player.x = Math.max(
+        0,
+        Math.min(
+            canvas.width - player.size,
+            player.x
+        )
+    );
+
+
+    touchStartX = currentX;
+
+});
+
+
+canvas.addEventListener("touchend", function() {
+
+    touchStartX = null;
+
+});
+
+</script>
+
+</body>
+</html>
